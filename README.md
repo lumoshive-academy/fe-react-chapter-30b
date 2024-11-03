@@ -1,57 +1,126 @@
-# Menggunakan Middleware Kustom di Redux
+# Menggunakan Redux Thunk untuk Aksi Asinkron di Redux
 
-Middleware di Redux memungkinkan kita untuk menangkap dan memodifikasi aksi (action) sebelum mencapai reducer. Ini berguna untuk menambahkan logika tambahan, seperti log aktivitas, validasi, atau penanganan asinkron seperti dengan `redux-thunk`.
+Redux Thunk adalah middleware yang memungkinkan kita untuk menulis aksi (actions) asinkron di Redux. Ini sangat berguna saat kita perlu melakukan operasi asinkron seperti pengambilan data dari API.
 
-Dalam panduan ini, kita akan membuat middleware kustom `loggerMiddleware` untuk mencatat setiap aksi yang diproses di store.
+## 1. Instalasi Redux Thunk
 
-## 1. Instalasi Paket Redux dan Redux Middleware
+Untuk menggunakan Redux Thunk, instal paket `redux-thunk` dengan perintah berikut:
 
-Pastikan Anda sudah menginstal `redux` dan `react-redux`:
 ```bash
-npm install redux react-redux
+npm install redux-thunk
 ```
-## 2. Membuat Middleware Kustom
-Middleware loggerMiddleware akan mencatat informasi tentang aksi (action) yang sedang diproses sebelum meneruskannya ke reducer.
+## 2. Konfigurasi Redux Store dengan Thunk Middleware
+Kita perlu menambahkan middleware thunk ke store untuk menangani aksi asinkron. Berikut adalah kode konfigurasi store.js:
 
 Kode: store.js
 ```javascript
 import { createStore, applyMiddleware } from 'redux';
-import counterReducer from './counterReducer';
+import thunk from 'redux-thunk';
+import asyncReducer from './asyncReducer';
 
-// Custom Middleware
-const loggerMiddleware = store => next => action => {
-    console.log('Middleware:', action.type);
-    return next(action);
-};
-
-// Membuat store Redux dengan middleware
+// Membuat store dengan middleware Thunk
 const store = createStore(
-    counterReducer,
-    applyMiddleware(loggerMiddleware)
+    asyncReducer,
+    applyMiddleware(thunk)
 );
 
 export default store;
 ```
-### Penjelasan
-- loggerMiddleware: Middleware ini menerima tiga argumen:
-  - store: Objek store Redux yang memberikan akses ke dispatch dan getState.
-  - next: Fungsi yang meneruskan aksi ke middleware berikutnya atau ke reducer.
-  - action: Aksi yang sedang diproses.
-- console.log('Middleware:', action.type): Middleware ini akan mencatat jenis aksi (action.type) yang sedang diproses ke konsol.
-- applyMiddleware: Fungsi applyMiddleware digunakan untuk menambahkan loggerMiddleware ke store Redux.
-## 3. Konfigurasi Store dengan Middleware
-Gunakan applyMiddleware untuk menambahkan loggerMiddleware ke dalam store. Ini memungkinkan semua aksi yang dikirimkan (dispatch) melewati loggerMiddleware sebelum mencapai reducer.
-```javascript
-const store = createStore(
-    counterReducer,
-    applyMiddleware(loggerMiddleware)
-);
-```
-## 4. Contoh Penggunaan Middleware dalam Aplikasi
-Dengan middleware ini, setiap kali aksi dikirimkan, Anda akan melihat pesan log di konsol dengan jenis aksi yang diproses, seperti INCREMENT atau DECREMENT.
-## Kesimpulan
-Middleware di Redux memungkinkan Anda untuk menangani aksi sebelum mencapai reducer. Dalam contoh ini:
-- loggerMiddleware mencatat setiap jenis aksi yang dikirim.
-- Middleware ditambahkan ke store menggunakan applyMiddleware.
+Penjelasan
+- applyMiddleware(thunk): Menambahkan middleware thunk untuk memungkinkan aksi asinkron di Redux.
+- asyncReducer: Reducer yang mengelola state todos dan error.
 
-Middleware kustom ini adalah cara yang efektif untuk menambahkan logika tambahan, seperti pencatatan dan penanganan efek samping, dalam alur kerja Redux.
+## 3. Membuat Thunk Action untuk Mengambil Data dari API
+Kita akan membuat aksi asinkron fetchTodos untuk mengambil data dari API dan mengirimkannya ke Redux.
+
+Kode: asyncReducer.js
+```javascript
+// State
+const initialState = {
+    todos: [],
+    error: null
+};
+
+// Thunk Action
+export const fetchTodos = () => {
+    return async dispatch => {
+        try {
+            const response = await fetch('https://jsonplaceholder.typicode.com/todos');
+            const data = await response.json();
+            dispatch({ type: 'FETCH_TODOS_SUCCESS', payload: data });
+        } catch (error) {
+            dispatch({ type: 'FETCH_TODOS_FAILURE', payload: error.message });
+        }
+    };
+};
+
+// Reducer
+const asyncReducer = (state = initialState, action) => {
+    switch (action.type) {
+        case 'FETCH_TODOS_SUCCESS':
+            return {
+                ...state,
+                todos: action.payload,
+                error: null
+            };
+        case 'FETCH_TODOS_FAILURE':
+            return {
+                ...state,
+                error: action.payload
+            };
+        default:
+            return state;
+    }
+};
+
+export default asyncReducer;
+```
+Penjelasan
+- initialState: Mendefinisikan state awal dengan todos sebagai array kosong dan error sebagai null.
+- fetchTodos (Thunk Action): Aksi asinkron yang menggunakan dispatch untuk mengirim aksi setelah data diambil.
+    - dispatch({ type: 'FETCH_TODOS_SUCCESS', payload: data }): Mengirim aksi FETCH_TODOS_SUCCESS dengan data yang berhasil diambil.
+    - dispatch({ type: 'FETCH_TODOS_FAILURE', payload: error.message }): Mengirim aksi FETCH_TODOS_FAILURE jika terjadi error.
+- Reducer: Mengelola state berdasarkan aksi yang diterima (FETCH_TODOS_SUCCESS atau FETCH_TODOS_FAILURE).
+## 4. Menggunakan Aksi Asinkron di Komponen React
+Komponen App akan menggunakan aksi fetchTodos untuk mengambil data dari API saat komponen pertama kali dimuat.
+
+Kode: App.js
+```javascript
+import React, { useEffect } from "react";
+import { useSelector, useDispatch } from "react-redux";
+import { fetchTodos } from "./redux/asyncReducer";
+
+const App = () => {
+  const dispatch = useDispatch();
+  const todos = useSelector((state) => state.todos);
+  const error = useSelector((state) => state.error);
+
+  useEffect(() => {
+    dispatch(fetchTodos());
+  }, [dispatch]);
+
+  if (error) return <p>Error: {error}</p>;
+
+  return (
+    <ul>
+      {todos.map((todo) => (
+        <li key={todo.id}>{todo.title}</li>
+      ))}
+    </ul>
+  );
+};
+
+export default App;
+```
+Penjelasan
+- useDispatch: Hook untuk mengirim aksi fetchTodos ke store.
+- useSelector: Hook untuk mengambil todos dan error dari state Redux.
+- useEffect: Mengirim aksi fetchTodos saat komponen dimuat pertama kali.
+- Error Handling: Jika terjadi error, akan ditampilkan pesan error.
+
+## Kesimpulan
+Dengan Redux Thunk, kita dapat menangani aksi asinkron seperti pengambilan data API di Redux. Dalam contoh ini:
+
+- Redux Thunk Middleware ditambahkan ke store untuk mengaktifkan aksi asinkron.
+- fetchTodos adalah thunk action yang mengambil data dan memperbarui state Redux berdasarkan hasil pengambilan data.
+- Komponen React menggunakan fetchTodos untuk mengambil data saat dimuat, dan menampilkan data todos atau pesan error jika ada.
